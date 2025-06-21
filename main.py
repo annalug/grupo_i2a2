@@ -1,74 +1,51 @@
 from dotenv import load_dotenv
-from auditor.agent import criar_agente_afi, AnaliseFiscal
-
-
-def apresentar_resultado(analise: AnaliseFiscal):
-    """Função auxiliar para imprimir a análise de forma organizada."""
-    print("\n--- ✅ Análise Fiscal Concluída ---")
-    print(f"📄 ID do Documento: {analise.id_documento}")
-    print(f"📊 Status Geral: {analise.status_geral.value}")
-
-    print("\n❗ Pontos de Atenção Encontrados:")
-    for ponto in analise.pontos_de_atencao:
-        print(f"  - {ponto}")
-
-    print("\n💡 Sugestões de Correção:")
-    for sugestao in analise.sugestoes_correcao:
-        print(f"  - {sugestao}")
-
-    print("\n📈 Resumo Executivo:")
-    print(f"  {analise.resumo_executivo}")
-    print("---------------------------------")
-
+from agent_analyst.data_agent import DataAnalysisAgent, pd
 
 def main():
     """
-    Função principal que orquestra o processo de análise fiscal.
+    Função principal que carrega os dados e inicia a interação com o agente.
     """
-    # 1. Carrega as variáveis de ambiente do arquivo .env
+    # 1. Carrega as variáveis de ambiente
     load_dotenv()
-    print("🤖 Iniciando o Auditor Fiscal Inteligente (AFI)...")
+    print("🚀 Iniciando o Agente de Análise de Dados de Notas Fiscais...")
 
-    # 2. Cria a instância do agente
+    # 2. Carrega os arquivos CSV para dataframes pandas
+    path_cabecalho = "data/202401_NFs_Cabecalho.csv"
+    path_itens = "data/202401_NFs_Itens.csv"
+
+    df_cabecalho = DataAnalysisAgent.load_data(path_cabecalho)
+    df_itens = DataAnalysisAgent.load_data(path_itens)
+
+    if df_cabecalho is None or df_itens is None:
+        print(" encerrando o programa.")
+        return
+
+    # 3. Cria a instância do agente com os dataframes carregados
     try:
-        agente_afi = criar_agente_afi()
+        analyst = DataAnalysisAgent(
+            df_list=[df_cabecalho, df_itens],
+            df_names=["df_cabecalho", "df_itens"]
+        )
     except ValueError as e:
         print(f"❌ Erro de configuração: {e}")
         return
 
-    # 3. Simula os dados de entrada (viriam de um XML/OCR em um caso real)
-    dados_nota_fiscal = {
-        "chave_nfe": "35240401234567890123456789012345678901234567",
-        "itens": [
-            {
-                "descricao": "MONITOR LED 24 POLEGADAS FULLHD",
-                "ncm": "85285200",
-                "quantidade": 10.0,
-                "valor_unitario": 150.00,
-                "valor_total": 1550.00,  # ERRO PROPOSITAL! (10 * 150 = 1500)
-                "impostos": {"icms": 180.00, "ipi": 75.00, "pis": 24.75, "cofins": 114.00}
-            },
-            {
-                "descricao": "TECLADO MECANICO GAMER RGB",
-                "ncm": "84716052",
-                "quantidade": 5.0,
-                "valor_unitario": 350.00,
-                "valor_total": 1750.00,
-                "impostos": {"icms": 210.00, "ipi": 87.50, "pis": 28.88, "cofins": 133.00}
-            }
-        ]
-    }
+    # 4. Lista de perguntas para o agente responder (conforme o escopo)
+    perguntas = [
+        "Qual é o fornecedor (RAZÃO SOCIAL EMITENTE) com o maior valor total de notas fiscais (VALOR NOTA FISCAL)?",
+        "Qual item (DESCRIÇÃO DO PRODUTO/SERVIÇO) teve o maior volume total entregue (soma da QUANTIDADE)?",
+        "Liste os 5 municípios emissores (MUNICÍPIO EMITENTE) com mais notas fiscais.",
+        "Qual o valor total de notas emitidas para o estado (UF DESTINATÁRIO) de São Paulo (SP)?",
+        "Existe alguma nota com valor superior a 100.000? Se sim, qual a sua chave de acesso e valor?"
+    ]
 
-    # 4. Executa a análise
-    prompt_usuario = f"Analise os dados da seguinte nota fiscal e retorne sua avaliação: {dados_nota_fiscal}"
-
-    try:
-        print("🗣️  Enviando dados para análise... Aguarde.")
-        resultado_analise = agente_afi.run_sync(prompt_usuario)
-        apresentar_resultado(resultado_analise)
-    except Exception as e:
-        print(f"❌ Ocorreu um erro durante a chamada à API: {e}")
-
+    # 5. Loop para fazer as perguntas e imprimir as respostas
+    for pergunta in perguntas:
+        resposta = analyst.run_query(pergunta)
+        if resposta is not None:
+            print("--------------------------------------------------")
+            print(f"📊 Resposta:\n{resposta}")
+            print("--------------------------------------------------")
 
 if __name__ == "__main__":
     main()

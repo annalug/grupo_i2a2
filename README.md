@@ -1,4 +1,4 @@
-Auditor Fiscal Inteligente (AFI)
+Agente de Análise de Notas Fiscais com Gemini AI
 
 Grupo: Anna_Milene_Jonatas
 
@@ -6,6 +6,24 @@ Integrantes: Anna Luiza Gomes, Millene Gomes e Jonatas Cavalcanti
 
 ## Descrição do Projeto
 
+Funcionalidades:
+* Processamento Automatizado de arquivos CSV contendo:
+
+* Cabeçalhos de notas fiscais
+
+* Itens detalhados de cada nota
+
+* Análise Inteligente via Gemini AI para:
+
+* Identificar fornecedores com maior volume
+
+* Detectar itens mais transacionados
+
+* Analisar padrões geográficos
+
+* Flaggar transações relevantes
+
+Integração Total com a API oficial do Google Gemini
 ## Estrutura do Projeto
 
 ```
@@ -14,7 +32,6 @@ grupo_i2a2/
 ├── .gitignore
 ├── README.md
 ├── requirements.txt
-├── pyproject.toml      # <-- NOVO ARQUIVO AQUI
 |
 ├── data/
 │   └── ...
@@ -62,10 +79,17 @@ pip install -r requirements.txt
 Crie um arquivo chamado .env na raiz do projeto
 ```
 # .env
-GOOGLE_API_KEY="SUA_CHAVE_DE_API_SUPER_SECRETA_VAI_AQUI"
+GEMINI_API_KEY="SUA_CHAVE_DE_API_SUPER_SECRETA_VAI_AQUI"
 ```
 
 ## Executando a Simulação
+Como Utilizar:
+* Configure sua chave API no arquivo .env
+
+* Coloque seus arquivos CSV na pasta /data
+
+* Execute 
+
 ```
 python main.py
 ```

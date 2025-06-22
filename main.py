@@ -1,5 +1,13 @@
+import os
+import sys
 from dotenv import load_dotenv
-from agent_analyst.data_agent import DataAnalysisAgent, pd
+from agent_analyst.data_agent import DataAnalysisAgent
+
+
+# Adiciona o diretório raiz do projeto ao path do Python para encontrar o módulo 'agent_analyst'
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+
+
 
 def main():
     """
@@ -13,6 +21,7 @@ def main():
     path_cabecalho = "data/202401_NFs_Cabecalho.csv"
     path_itens = "data/202401_NFs_Itens.csv"
 
+    # A chamada agora funciona porque load_data é um staticmethod
     df_cabecalho = DataAnalysisAgent.load_data(path_cabecalho)
     df_itens = DataAnalysisAgent.load_data(path_itens)
 

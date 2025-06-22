@@ -10,20 +10,20 @@ Integrantes: Anna Luiza Gomes, Millene Gomes e Jonatas Cavalcanti
 
 ```
 grupo_i2a2/
-├── .env                  # Arquivo para a chave de API
+├── .env
 ├── .gitignore
-├── README.md             # NOVO README para este projeto
-├── requirements.txt      # Dependências atualizadas
+├── README.md
+├── requirements.txt
+├── pyproject.toml      # <-- NOVO ARQUIVO AQUI
 |
-├── data/                 # Pasta para armazenar os arquivos CSV
-│   ├── 202401_NFs_Cabecalho.csv
-│   └── 202401_NFs_Itens.csv
+├── data/
+│   └── ...
 │
 ├── agent_analyst/
 │   ├── __init__.py
-│   └── data_agent.py     # Lógica do agente de análise de dados
+│   └── data_agent.py
 │
-└── main.py               # Script principal para interagir com o agente
+└── main.py
 ```
 
 ## Como Executar o Projeto

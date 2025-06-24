@@ -28,19 +28,17 @@ Integração Total com a API oficial do Google Gemini
 
 ```
 grupo_i2a2/
-├── .env
-├── .gitignore
-├── README.md
-├── requirements.txt
-|
-├── data/
-│   └── ...
+├── .env                          # Configurações de ambiente
+├── .gitignore                    # Arquivos ignorados pelo Git
+├── README.md                     # Documentação do projeto
+├── requirements.txt              # Dependências Python
+├── dashboard.py                  # Interface Streamlit
 │
-├── agent_analyst/
-│   ├── __init__.py
-│   └── data_agent.py
+├── data/                         # Dados das notas fiscais
 │
-└── main.py
+└── agent_analyst/               # Módulo do agente
+    ├── __init__.py
+    └── orchestrator_agent.py    # Lógica principal do agente
 ```
 
 ## Como Executar o Projeto
@@ -79,22 +77,37 @@ pip install -r requirements.txt
 Crie um arquivo chamado .env na raiz do projeto
 ```
 # .env
-GEMINI_API_KEY="SUA_CHAVE_DE_API_SUPER_SECRETA_VAI_AQUI"
+GROQ_API_KEY="SUA_CHAVE_DE_API"
 ```
-
+Certifique-se de que os arquivo .zip de dados esta na pasta /data
 ## Executando a Simulação
 Como Utilizar:
 * Configure sua chave API no arquivo .env
 
 * Coloque seus arquivos CSV na pasta /data
 
-* Execute 
+* Execute o Dashboard Interativo
 
 ```
-python main.py
+streamlit run dashboard.py
 ```
+O sistema abrirá no navegador (geralmente http://localhost:8501).
 
 
+🛠️ Tecnologias Utilizadas:
 
+* 🐍 Python 3.10+ - Linguagem principal
+* 🤖 PydanticAI - Framework para agentes de IA
+* ⚡ Groq API - Modelos de linguagem rápidos
+* 🎨 Streamlit - Interface web interativa
+* 📊 Pandas - Processamento de dados
+* 🔧 Python-dotenv - Gerenciamento de variáveis de ambiente
+
+📊 Dados do Projeto
+O sistema trabalha com 100 notas fiscais do período de janeiro/2024, contendo:
+
+- Cabeçalho: Informações principais (emissor, valor, data, etc.)
+- Itens: Produtos detalhados de cada nota fiscal
+- Relacionamento: Ligação via "CHAVE DE ACESSO"
 
 

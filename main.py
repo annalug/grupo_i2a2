@@ -1,12 +1,15 @@
+# main.py
+
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
 import os
-import pandas as pd
 
 # Configurar caminhos
 sys.path.insert(0, str(Path(__file__).parent))
-from agent_analyst.data_agent import DataAnalyzer
+# Importa o novo agente orquestrador
+from agent_analyst.orchestrator_agent import OrchestratorAgent
+
 
 def main():
     # Configuração inicial
@@ -17,38 +20,32 @@ def main():
     os.environ['GROQ_API_KEY'] = os.getenv("GROQ_API_KEY")
     os.environ['LOGFIRE_IGNORE_NO_CONFIG'] = '1'
 
-    # Inicializar analisador
-    analyzer = DataAnalyzer(model_name='groq:gemma2-9b-it')
+    # Inicializar o agente orquestrador robusto
+    agent = OrchestratorAgent(model_name='groq:gemma2-9b-it')
+
+    # Lista de perguntas para fazer ao agente
+    perguntas = [
+        "Qual é o fornecedor (RAZÃO SOCIAL EMITENTE) com o maior valor total em notas fiscais (VALOR NOTA FISCAL)? Mostre o nome e o valor.",
+        "Quantas notas fiscais únicas existem no total?",
+        "Qual o valor total de notas para o estado de 'SP' (UF DESTINATÁRIO)?",
+        "Qual o produto (DESCRIÇÃO DO PRODUTO/SERVIÇO) mais vendido em quantidade (QUANTIDADE)?"
+    ]
 
     try:
-        # Carregar dados
-        df_cabecalho, df_itens = analyzer.load_data()
-        df_completo = pd.merge(
-            df_cabecalho,
-            df_itens,
-            on='CHAVE DE ACESSO',
-            how='left',
-            suffixes=('_CAB', '_ITEM')
-        )
-
-        # Perguntas de exemplo
-        perguntas = [
-            "Quais são as colunas disponíveis nos dados?",
-            "Quantas notas fiscais existem no total?",
-            "Qual é o fornecedor com maior valor total em notas fiscais?",
-            "Qual é o produto mais frequente nas notas?",
-            "Qual o valor total de notas para o estado de SP?",
-            "Existem notas com valor superior a 100.000? Se sim, quantas?"
-        ]
-
         for pergunta in perguntas:
-            print(f"\n❓ Pergunta: {pergunta}")
-            resposta = analyzer.ask_question(df_completo, pergunta)
-            print(f"💡 Resposta:\n{resposta}")
-            print("─" * 50)
+            print(f"\n🎯 Executando tarefa para a pergunta: \"{pergunta}\"")
+            print("=" * 60)
+
+            # O método run_task agora faz tudo: prepara os dados e responde à pergunta
+            resposta_final = agent.run_task(pergunta)
+
+            print("\n✅ Tarefa Concluída!")
+            print(f"💡 Resposta Final do Agente:\n{resposta_final}")
+            print("─" * 60)
 
     except Exception as e:
-        print(f"❌ Erro fatal: {str(e)}")
+        print(f"❌ Erro fatal no script principal: {str(e)}")
+
 
 if __name__ == "__main__":
     main()

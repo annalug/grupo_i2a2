@@ -1,0 +1,5 @@
+nest_asyncio==1.6.0
+pandas==1.5.3
+pydantic_ai==0.3.3
+python-dotenv==1.1.1
+streamlit==1.46.0

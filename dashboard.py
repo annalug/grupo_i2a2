@@ -1,10 +1,11 @@
 # dashboard.py (versão corrigida)
 
 import streamlit as st
-import sys
+
 from pathlib import Path
 from dotenv import load_dotenv
 import os
+import sys
 
 # Configurar caminhos para importar o agente
 sys.path.insert(0, str(Path(__file__).parent))
@@ -32,22 +33,22 @@ os.environ['LOGFIRE_IGNORE_NO_CONFIG'] = '1'
 
 @st.cache_resource
 def initialize_agent():
-    """
-    Inicializa e prepara o OrchestratorAgent com os dados das notas fiscais.
-    Esta função é cacheada para evitar recarregamento desnecessário.
-    """
     try:
-        agent = OrchestratorAgent(model_name='groq:gemma2-9b-it')
+        agent = OrchestratorAgent(model_name='llama3-70b-8192')  # Usando o modelo recomendado
 
-        # Força a preparação dos dados fazendo uma pergunta simples
+        # Carrega os dados antes do teste
+        agent._prepare_data(
+            zip_filename="202401_NFs.zip",
+            cabecalho_filename="202401_NFs_Cabecalho.csv",
+            itens_filename="202401_NFs_Itens.csv"
+        )
+
         test_response = agent.run_task("Quantas colunas tem o cabeçalho?")
 
-        # Verifica se a inicialização foi bem-sucedida
         if "❌" in test_response:
             raise Exception(f"Falha na inicialização: {test_response}")
 
         return agent
-
     except Exception as e:
         raise Exception(f"Erro ao inicializar agente: {str(e)}")
 

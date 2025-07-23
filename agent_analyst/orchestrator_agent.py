@@ -1,27 +1,31 @@
-# agent_analyst/orchestrator_agent.py (versão corrigida)
 
-from dataclasses import dataclass
-from pydantic_ai import Agent, RunContext, ModelRetry
 import pandas as pd
 from pathlib import Path
 import zipfile
 import nest_asyncio
 
+from langchain_groq import ChatGroq
+from langchain.tools import Tool
+from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+
 nest_asyncio.apply()
 
 
-@dataclass
-class QueryDeps:
-    df_cabecalho: pd.DataFrame
-    df_itens: pd.DataFrame
-
-
 class OrchestratorAgent:
-    def __init__(self, model_name: str = 'groq:gemma2-9b-it'):
+    def __init__(self, model_name: str = 'llama3-70b-8192'):  # Modelo válido da Groq
         self.data_path = Path("data")
         self.df_cabecalho = None
         self.df_itens = None
         self.is_data_prepared = False
+
+        # Initialize the LangChain LLM with valid model
+        self.llm = ChatGroq(
+            model_name=model_name,
+            temperature=0,
+            max_tokens=8192  # Ajustado para o novo modelo
+        )
 
         self.base_system_prompt = """
         Você é um especialista em análise de dados de notas fiscais eletrônicas (NF-e).
@@ -43,9 +47,10 @@ class OrchestratorAgent:
            - Use df_itens para produtos, quantidades, etc.
            - Combine com df_cabecalho via merge quando necessário
 
-        4. **Sempre use a ferramenta safe_cross_query para executar consultas**
+        4. **Sempre use a ferramenta safe_cross_query para executar consultas.**
+           Para usar a ferramenta, chame `safe_cross_query("SEU CÓDIGO PYTHON AQUI")`.
 
-        **EXEMPLOS CORRETOS:**
+        **EXEMPLOS CORRETOS DE USO DA FERRAMENTA:**
         - "Quantas notas fiscais?" → safe_cross_query("len(df_cabecalho)")
         - "Valor total?" → safe_cross_query("df_cabecalho['VALOR NOTA FISCAL'].sum()")
         - "Produto mais vendido?" → safe_cross_query("df_itens['DESCRIÇÃO DO PRODUTO/SERVIÇO'].value_counts().head(1)")
@@ -53,30 +58,58 @@ class OrchestratorAgent:
         Sempre responda em Português do Brasil e seja preciso com os números.
         """
 
-        self.query_agent = Agent(
-            model=model_name,
-            system_prompt=self.base_system_prompt,
-            deps_type=QueryDeps,
-            retries=4
+        # Define the tool for LangChain
+        # safe_cross_query is now an instance method so it can access self.df_cabecalho and self.df_itens
+        tools = [
+            Tool(
+                name="safe_cross_query",
+                func=self.safe_cross_query, # Bind method to instance
+                description="""
+                Executa consultas seguras nos DataFrames 'df_cabecalho' (dados do cabeçalho) 
+                e 'df_itens' (dados dos itens).
+                Forneça a string completa do código Python como entrada.
+                Exemplo: safe_cross_query("len(df_cabecalho)")
+                """
+            )
+        ]
+
+        # Create the prompt template for the LangChain agent
+        self.prompt = ChatPromptTemplate.from_messages([
+            ("system", self.base_system_prompt),
+            MessagesPlaceholder(variable_name="chat_history", optional=True), # For conversation memory, if implemented
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"), # For tool calls and observations
+        ])
+
+        # Create the LangChain agent
+        self.agent = create_tool_calling_agent(self.llm, tools, self.prompt)
+
+        # Create the Agent Executor
+        self.agent_executor = AgentExecutor(
+            agent=self.agent,
+            tools=tools,
+            verbose=True, # Set to True to see agent's thought process
+            handle_parsing_errors=True # Allows agent to recover from parsing errors
         )
 
-        # Registrar a tool corretamente
-        self.query_agent.tool(self.safe_cross_query)
 
-    @staticmethod
-    def safe_cross_query(ctx: RunContext[QueryDeps], query: str) -> str:
+    # Removed @staticmethod as it now accesses self.df_cabecalho and self.df_itens
+    def safe_cross_query(self, query: str) -> str:
         """
         Executa consultas seguras nos DataFrames de notas fiscais.
 
         Args:
-            ctx: Contexto com os DataFrames
             query: Código Python para executar
         """
         try:
+            # Ensure dataframes are loaded before querying
+            if self.df_cabecalho is None or self.df_itens is None:
+                raise ValueError("DataFrames df_cabecalho ou df_itens não foram carregados. Chame _prepare_data primeiro.")
+
             print(f"🔍 Executando consulta: {query}")
 
-            df_cabecalho = ctx.deps.df_cabecalho
-            df_itens = ctx.deps.df_itens
+            df_cabecalho = self.df_cabecalho
+            df_itens = self.df_itens
 
             # Ambiente seguro para eval
             safe_globals = {
@@ -129,7 +162,8 @@ class OrchestratorAgent:
 
             suggestion_text = "\n🔧 Sugestões: " + "; ".join(suggestions) if suggestions else ""
 
-            raise ModelRetry(f"{error_details}{suggestion_text}") from e
+            # Raise a standard Exception, which AgentExecutor will catch and pass as an observation
+            raise ValueError(f"Tool execution failed: {error_details}{suggestion_text}") from e
 
     def _prepare_data(self, zip_filename: str, cabecalho_filename: str, itens_filename: str):
         """Prepara e carrega os dados das notas fiscais"""
@@ -152,132 +186,62 @@ class OrchestratorAgent:
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(self.data_path)
 
-        # Carregar DataFrame do cabeçalho
-        print("📄 Carregando dados do cabeçalho...")
-        self.df_cabecalho = pd.read_csv(
-            path_cabecalho,
-            sep=',',
-            decimal='.',
-            dtype={'CHAVE DE ACESSO': str},
-            parse_dates=['DATA EMISSÃO']
-        )
+        # Função auxiliar para detectar delimitador
+        def detect_delimiter(file_path):
+            with open(file_path, 'r') as f:
+                first_line = f.readline()
+            return ';' if ';' in first_line else ','
 
-        # Carregar DataFrame dos itens
-        print("📋 Carregando dados dos itens...")
-        self.df_itens = pd.read_csv(
-            path_itens,
-            sep=',',
-            decimal='.',
-            dtype={'CHAVE DE ACESSO': str},
-            parse_dates=['DATA EMISSÃO']
-        )
-
-        # Validar dados carregados
-        self._validate_data()
-
-        self.is_data_prepared = True
-        print("✅ Dados preparados com sucesso!")
-
-    def _validate_data(self):
-        """Valida a integridade dos dados carregados"""
-        print("\n🔍 Validando integridade dos dados:")
-
-        # Verificar se os DataFrames foram carregados
-        if self.df_cabecalho is None or self.df_itens is None:
-            raise ValueError("Erro: DataFrames não foram carregados corretamente")
-
-        # Estatísticas básicas
-        total_notas = len(self.df_cabecalho)
-        total_itens = len(self.df_itens)
-        chaves_unicas_cab = self.df_cabecalho['CHAVE DE ACESSO'].nunique()
-        chaves_unicas_itens = self.df_itens['CHAVE DE ACESSO'].nunique()
-
-        print(f"📊 Estatísticas dos dados:")
-        print(f"   • Total de notas fiscais (cabeçalho): {total_notas}")
-        print(f"   • Total de itens: {total_itens}")
-        print(f"   • Chaves únicas no cabeçalho: {chaves_unicas_cab}")
-        print(f"   • Chaves únicas nos itens: {chaves_unicas_itens}")
-
-        # Validações críticas
-        if total_notas != chaves_unicas_cab:
-            raise ValueError(
-                f"ERRO: Duplicatas no cabeçalho! Linhas: {total_notas}, Chaves únicas: {chaves_unicas_cab}")
-
-        # Verificar se esperamos 100 notas conforme mencionado
-        if total_notas != 100:
-            print(f"⚠️ AVISO: Esperado 100 notas, encontrado {total_notas}")
-
-        # Verificar integridade referencial
-        chaves_orfas = ~self.df_itens['CHAVE DE ACESSO'].isin(self.df_cabecalho['CHAVE DE ACESSO'])
-        if chaves_orfas.any():
-            total_orfas = chaves_orfas.sum()
-            print(f"⚠️ AVISO: {total_orfas} itens sem nota fiscal correspondente no cabeçalho")
-
-        print("✅ Validação concluída")
-
-    def run_task(self, question: str) -> str:
-        """
-        Executa uma tarefa/pergunta sobre os dados das notas fiscais
-
-        Args:
-            question: Pergunta em linguagem natural
-
-        Returns:
-            str: Resposta da análise
-        """
         try:
-            # Preparar dados se necessário
-            if not self.is_data_prepared:
-                self._prepare_data(
-                    zip_filename="202401_NFs.zip",
-                    cabecalho_filename="202401_NFs_Cabecalho.csv",
-                    itens_filename="202401_NFs_Itens.csv"
-                )
-
-            # Verificar se os dados estão disponíveis
-            if self.df_cabecalho is None or self.df_itens is None:
-                return "❌ Erro: Dados não foram carregados corretamente. Verifique os arquivos."
-
-            print(f"\n🎯 Processando pergunta: '{question}'")
-
-            # Criar dependências para o agente
-            deps = QueryDeps(
-                df_cabecalho=self.df_cabecalho,
-                df_itens=self.df_itens
+            # Carregar DataFrame do cabeçalho com tratamento robusto
+            print("📄 Carregando dados do cabeçalho...")
+            cab_delimiter = detect_delimiter(path_cabecalho)
+            self.df_cabecalho = pd.read_csv(
+                path_cabecalho,
+                sep=cab_delimiter,
+                decimal='.',
+                dtype={'CHAVE DE ACESSO': str},
+                parse_dates=['DATA EMISSÃO'],
+                on_bad_lines='warn'  # Apenas avisa sobre linhas problemáticas
             )
 
-            # Executar consulta via agente
-            response = self.query_agent.run_sync(question, deps=deps)
+            # Carregar DataFrame dos itens com tratamento robusto
+            print("📋 Carregando dados dos itens...")
+            itens_delimiter = detect_delimiter(path_itens)
+            self.df_itens = pd.read_csv(
+                path_itens,
+                sep=itens_delimiter,
+                decimal='.',
+                dtype={'CHAVE DE ACESSO': str},
+                parse_dates=['DATA EMISSÃO'],
+                on_bad_lines='warn'
+            )
 
-            # Extrair a resposta final
-            final_response = response.new_messages()[-1].parts[0].content
+            # Verificação básica dos dados
+            if self.df_cabecalho.empty or self.df_itens.empty:
+                raise ValueError("Um ou mais DataFrames foram carregados vazios")
 
-            return final_response
+            # Marcar dados como preparados
+            self.is_data_prepared = True
+            print(
+                f"✅ Dados carregados com sucesso! Cabeçalho: {len(self.df_cabecalho)} notas, Itens: {len(self.df_itens)} registros")
 
         except Exception as e:
-            error_msg = f"❌ Erro ao processar a pergunta: {str(e)}"
+            print(f"❌ Erro ao carregar dados: {str(e)}")
+            raise
+
+    def run_task(self, user_input: str) -> str:
+        """Método principal para executar tarefas do agente"""
+        try:
+            # Verifica se os dados estão carregados
+            if not self.is_data_prepared:
+                return "❌ Dados não carregados. Execute _prepare_data primeiro."
+
+            # Processa a consulta
+            result = self.agent_executor.invoke({"input": user_input})
+            return result["output"]
+
+        except Exception as e:
+            error_msg = f"❌ Erro ao processar: {str(e)}"
             print(error_msg)
             return error_msg
-
-    def get_data_summary(self) -> str:
-        """Retorna um resumo dos dados carregados"""
-        if not self.is_data_prepared:
-            return "Dados ainda não foram preparados."
-
-        summary = f"""
-📈 **Resumo dos Dados Carregados:**
-
-🧾 **Cabeçalho das Notas:**
-   • Total de notas fiscais: {len(self.df_cabecalho)}
-   • Período: {self.df_cabecalho['DATA EMISSÃO'].min()} a {self.df_cabecalho['DATA EMISSÃO'].max()}
-   • Valor total: R$ {self.df_cabecalho['VALOR NOTA FISCAL'].sum():,.2f}
-
-📋 **Itens das Notas:**
-   • Total de itens: {len(self.df_itens)}
-   • Produtos únicos: {self.df_itens['DESCRIÇÃO DO PRODUTO/SERVIÇO'].nunique()}
-
-🔗 **Integridade:**
-   • Chaves no cabeçalho: {self.df_cabecalho['CHAVE DE ACESSO'].nunique()}
-   • Chaves nos itens: {self.df_itens['CHAVE DE ACESSO'].nunique()}
-"""
-        return summary

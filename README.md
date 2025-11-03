@@ -1,4 +1,4 @@
-🤖 Analisador e Classificador Inteligente de Documentos Fiscais (Aprimorado)
+🤖 Analisador e Classificador Inteligente de Documentos Fiscais 
 
 Este projeto foi aprimorado para incorporar uma arquitetura de Agentes Especializados, permitindo uma classificação, categorização e análise fiscal customizada por ramo de atividade, conforme as especificações de negócio.
 

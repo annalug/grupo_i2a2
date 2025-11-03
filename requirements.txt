@@ -1,0 +1,6 @@
+streamlit
+pandas
+lxml
+Pillow
+tesseract
+pytesseract
